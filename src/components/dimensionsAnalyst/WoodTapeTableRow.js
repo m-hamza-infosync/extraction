@@ -45,14 +45,14 @@ function WoodTapeTableRow({
           {WoodTapeSize.map((item, index) => {
             return (
               <MenuItem key={index} value={item.Size}>
-                {item.Size}
+                {item.Size.toUpperCase()}
               </MenuItem>
             );
           })}
         </Select>
       </TableCell>
 
-      <TableCell>
+      {/* <TableCell>
         <TextField
           size="small"
           variant="outlined"
@@ -78,7 +78,7 @@ function WoodTapeTableRow({
             handleEdit(e, _key, propType);
           }}
         />
-      </TableCell>
+      </TableCell> 
 
       <TableCell>
         <TextField
@@ -89,7 +89,7 @@ function WoodTapeTableRow({
           disabled
           value={getTotal()}
         />
-      </TableCell>
+      </TableCell>*/}
     </TableRow>
   );
 }

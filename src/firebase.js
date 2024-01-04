@@ -23,8 +23,19 @@ const firebaseConfig = {
   messagingSenderId: "169308840747",
   appId: "1:169308840747:web:898c36abb45b720acd5b6e",
 };
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// const firebaseConfig = {
+//   apiKey: "AIzaSyBehoHlTO2zcfO8R8eZDJ1Ju3nJZX82r9Y",
+//   authDomain: "infosync-oakland-portal.firebaseapp.com",
+//   projectId: "infosync-oakland-portal",
+//   storageBucket: "infosync-oakland-portal.appspot.com",
+//   messagingSenderId: "868103457113",
+//   appId: "1:868103457113:web:73de1ec4b05510e5abe448",
+//   measurementId: "G-MRH4T1GPDC"
+// };
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+let secondaryApp = initializeApp(firebaseConfig, "secondary");
 const auth = getAuth();
 
 // initilize Firestore
@@ -46,4 +57,4 @@ const firestore = getFirestore();
 //     console.log(err.message);
 //   });
 
-export { app, auth, firestore };
+export { app, auth, firestore, secondaryApp };

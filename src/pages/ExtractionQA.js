@@ -1,15 +1,14 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./extraction.css";
-// import extractImages from "../res/Extraction.json";
-
 import CancelIcon from "@mui/icons-material/Cancel";
-import { getAuth, signOut } from "firebase/auth";
-import { useNavigate } from "react-router";
 import HeaderSignOut from "../components/header/HeaderSignOut";
-import { toast, ToastContainer } from "react-toastify";
+import { triggerToast } from "../utils/triggerToast";
 
 const ExtractionQA = (props) => {
-  const navigate = useNavigate();
+  // =========================================================================
+  const [searchQuery, setSearchQuery] = useState('')
+  // =========================================================================
+
   const [allImages, setAllImages] = useState([]);
   const [selectedButton, setSelectedButton] = useState("");
   const [selectedThumbnail, setSelectedThumbnail] = useState([]);
@@ -125,21 +124,14 @@ const ExtractionQA = (props) => {
 
   const [visibilityNotDoable, setVisibilityNotDoable] = useState(false);
 
-  const [url, setUrl] = useState("");
-  const [jsonResult, setJsonResult] = useState(""); // Initialize as an empty string
-
   // SET SELECT OPTION
-  const [selectedOption, setSelectedOption] = useState("QA passed"); // Default value
+  const [selectedOption, setSelectedOption] = useState("passed"); // Default value
 
   const handleSelectChange = (event) => {
     setSelectedOption(event.target.value);
   };
 
-  // http://139.144.30.86:3001/api/fetch-data
-  // 161.97.167.225/scrape
-  // http://161.97.167.225:8000/api/get_job
-
-  const executePythonScript = async () => {
+  const executePythonScript = async (e) => {
     if (props.user) {
       // Get the authentication token
       props.user
@@ -147,7 +139,10 @@ const ExtractionQA = (props) => {
         .then((token) => {
           console.log(token);
           // Define the API endpoint URL
-          const apiUrl = "http://139.144.30.86:8000/api/get_job";
+          var apiUrl = `${process.env.REACT_APP_SERVER_ADDRESS}/api/get_job`
+          if (e.target.id === 'btn-go' && searchQuery !== '') {
+            apiUrl = apiUrl + `?url=${encodeURIComponent(searchQuery)}`
+          }
           setToken(token);
           // Make an authenticated API request
           fetch(apiUrl, {
@@ -159,6 +154,11 @@ const ExtractionQA = (props) => {
             .then((response) => response.json()) // Assuming server responds with json
             .then((data) => {
               console.log("API Response:", data);
+              if (data.detail && data.detail !== "") {
+                triggerToast(data.detail, "error", "50px", "top-left")
+                resetAllValues()
+                return
+              }
               setIsFetchButtonDisabled(true);
               setAllImages(data.unsorted || []);
               setDefaultThumbnail(data.thumbnails);
@@ -172,17 +172,54 @@ const ExtractionQA = (props) => {
               setNotDoable(data.not_doable);
               // NOT DO ABLE BUTTON VISIBILITY
               setVisibilityNotDoable(true);
+              setSelectedOption(data.not_doable ? 'major' : 'passed')
             })
             .catch((error) => {
+              resetAllValues()
+              triggerToast(error.toString(), "error", "50px", "top-left")
               console.error("Error:", error);
             });
         })
         .catch((error) => {
           // Handle any errors while getting the token
+          resetAllValues()
+          triggerToast(error.toString(), "error", "50px", "top-left")
           console.error("Token Error:", error);
         });
     }
   };
+
+
+  const resetAllValues = () => {
+    setDefaultThumbnail([]);
+    setSelectedThumbnail([]);
+    setDefaultDimension([]);
+    setSelectedDimentional([]);
+    setSelectedWhiteBg([]);
+    setDefaultWhiteBg([]);
+    setSelectedOrdinary([]);
+    setDefaultOrdinary([]);
+    setSelectedDiscard([]);
+    setDefaultDiscard([]);
+    setVideos([]);
+    setAllImages([]);
+
+    setHasThumbnailImagesMapped(false);
+    setHasDimensionalImagesMapped(false);
+    setHasWhiteBgImagesMapped(false);
+    setHasOrdinaryImagesMapped(false);
+    setHasDiscardImagesMapped(false);
+    // Enable the other buttons
+    setIsThumbnailButtonDisabled(false);
+    setIsDimensionalButtonDisabled(false);
+    setIsWhiteBgButtonDisabled(false);
+    setIsOrdinaryButtonDisabled(false);
+    setIsDiscardButtonDisabled(false);
+    // ENABLE DISABLE BUTTON ON SUBMIT SORTED DATA
+    setIsFetchButtonDisabled(false);
+    setVisibilityNotDoable(false);
+    setSearchQuery('')
+  }
 
   // DEFAULT SECTION METHOD
 
@@ -346,34 +383,7 @@ const ExtractionQA = (props) => {
 
   // Enable/disable buttons based on the selected button
   const handleButtonClick = (buttonName) => {
-    if (buttonName === "Thumbnail") {
-      setIsThumbnailButtonDisabled(hasThumbnailImagesMapped);
-    } else if (buttonName === "Dimensional") {
-      setIsDimensionalButtonDisabled(hasDimensionalImagesMapped);
-    } else if (buttonName === "WhiteBg") {
-      setIsWhiteBgButtonDisabled(hasWhiteBgImagesMapped);
-    } else if (buttonName === "Ordinary") {
-      setIsOrdinaryButtonDisabled(hasOrdinaryImagesMapped);
-    } else if (buttonName === "Discard") {
-      setIsDiscardButtonDisabled(hasDiscardImagesMapped);
-    }
-
     setSelectedButton(buttonName);
-    setIsThumbnailButtonDisabled(
-      buttonName === "Thumbnail" || selectedThumbnail.length > 0
-    );
-    setIsDimensionalButtonDisabled(
-      buttonName === "Dimensional" || selectedDimentional.length > 0
-    );
-    setIsWhiteBgButtonDisabled(
-      buttonName === "WhiteBg" || selectedWhiteBg.length > 0
-    );
-    setIsOrdinaryButtonDisabled(
-      buttonName === "Ordinary" || selectedOrdinary.length > 0
-    );
-    setIsDiscardButtonDisabled(
-      buttonName === "Discard" || selectedDiscard.length > 0
-    );
   };
 
   // reset all state in edit button logic
@@ -383,10 +393,6 @@ const ExtractionQA = (props) => {
     setSelectedThumbnail([]);
     setAllImages((prevImages) => [...prevImages, item]);
     setIsThumbnailButtonDisabled(hasThumbnailImagesMapped);
-
-    // Disable the edit mode for thumbnail images
-    // setIsThumbnailEditMode(false);
-
     // Clear the selected image IDs
     setImageSelectedIds([]);
 
@@ -440,83 +446,109 @@ const ExtractionQA = (props) => {
   };
   const selectMyItem = (item) => {
     setSelectedImage(item);
-    if (selectedButton === "Thumbnail") {
-      if (!hasThumbnailImagesMapped) {
-        // Allow selection of thumbnail images only if they haven't been mapped
-        if (imageSelectedIds.includes(item)) {
-          setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
-        } else {
-          setImageSelectedIds([item]);
-        }
-      }
-    } else if (selectedButton === "Dimensional") {
-      if (!hasDimensionalImagesMapped) {
-        // Allow selection of dimensional images only if they haven't been mapped
-        if (imageSelectedIds.includes(item)) {
-          setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
-        } else {
-          // setImageSelectedIds([item]);
-          setImageSelectedIds([...imageSelectedIds, item]);
-        }
-      }
-    } else if (selectedButton === "WhiteBg") {
-      if (!hasWhiteBgImagesMapped) {
-        // Allow selection of dimensional images only if they haven't been mapped
-        if (imageSelectedIds.includes(item)) {
-          setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
-        } else {
-          // setImageSelectedIds([item]);
-          setImageSelectedIds([...imageSelectedIds, item]);
-        }
-      }
-    } else if (selectedButton === "Ordinary") {
-      if (!hasOrdinaryImagesMapped) {
-        // Allow selection of ordinary images only if they haven't been mapped
-        if (imageSelectedIds.includes(item)) {
-          setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
-        } else {
-          // setImageSelectedIds([item]);
-          setImageSelectedIds([...imageSelectedIds, item]);
-        }
-      }
-    } else if (selectedButton === "Discard") {
-      if (!hasDiscardImagesMapped) {
-        // Allow selection of discard images only if they haven't been mapped
-        if (imageSelectedIds.includes(item)) {
-          setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
-        } else {
-          setImageSelectedIds([...imageSelectedIds, item]);
-        }
-      }
+    if (imageSelectedIds.includes(item)) {
+      setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
+    } else {
+      // setImageSelectedIds([item]);
+      setImageSelectedIds([...imageSelectedIds, item]);
     }
+
+
+    // if (selectedButton === "Thumbnail") {
+    //   if (!hasThumbnailImagesMapped) {
+    //     // Allow selection of thumbnail images only if they haven't been mapped
+    //     if (imageSelectedIds.includes(item)) {
+    //       setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
+    //     } else {
+    //       setImageSelectedIds([item]);
+    //     }
+    //   }
+    // } else if (selectedButton === "Dimensional") {
+    //   if (!hasDimensionalImagesMapped) {
+    //     // Allow selection of dimensional images only if they haven't been mapped
+    //     if (imageSelectedIds.includes(item)) {
+    //       setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
+    //     } else {
+    //       // setImageSelectedIds([item]);
+    //       setImageSelectedIds([...imageSelectedIds, item]);
+    //     }
+    //   }
+    // } else if (selectedButton === "WhiteBg") {
+    //   if (!hasWhiteBgImagesMapped) {
+    //     // Allow selection of dimensional images only if they haven't been mapped
+    //     if (imageSelectedIds.includes(item)) {
+    //       setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
+    //     } else {
+    //       // setImageSelectedIds([item]);
+    //       setImageSelectedIds([...imageSelectedIds, item]);
+    //     }
+    //   }
+    // } else if (selectedButton === "Ordinary") {
+    //   if (!hasOrdinaryImagesMapped) {
+    //     // Allow selection of ordinary images only if they haven't been mapped
+    //     if (imageSelectedIds.includes(item)) {
+    //       setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
+    //     } else {
+    //       // setImageSelectedIds([item]);
+    //       setImageSelectedIds([...imageSelectedIds, item]);
+    //     }
+    //   }
+    // } else if (selectedButton === "Discard") {
+    //   if (!hasDiscardImagesMapped) {
+    //     // Allow selection of discard images only if they haven't been mapped
+    //     if (imageSelectedIds.includes(item)) {
+    //       setImageSelectedIds(imageSelectedIds.filter((id) => id !== item));
+    //     } else {
+    //       setImageSelectedIds([...imageSelectedIds, item]);
+    //     }
+    //   }
+    // }
   };
 
   // logic of submit button for show and delete images
 
   const submitData = () => {
-    if (selectedButton === "Thumbnail") {
-      setHasThumbnailImagesMapped(true);
-      setImageSelectedIds([]);
-    } else if (selectedButton === "Dimensional") {
-      setHasDimensionalImagesMapped(true);
-      setImageSelectedIds([]);
-    } else if (selectedButton === "WhiteBg") {
-      setHasWhiteBgImagesMapped(true);
-      setImageSelectedIds([]);
-    } else if (selectedButton === "Ordinary") {
-      setHasOrdinaryImagesMapped(true);
-      setImageSelectedIds([]);
-    } else if (selectedButton === "Discard") {
-      setHasDiscardImagesMapped(true);
-      setImageSelectedIds([]);
+    // if (selectedButton === "Thumbnail") {
+    //   setHasThumbnailImagesMapped(true);
+    //   setImageSelectedIds([]);
+    // } else if (selectedButton === "Dimensional") {
+    //   setHasDimensionalImagesMapped(true);
+    //   setImageSelectedIds([]);
+    // } else if (selectedButton === "WhiteBg") {
+    //   setHasWhiteBgImagesMapped(true);
+    //   setImageSelectedIds([]);
+    // } else if (selectedButton === "Ordinary") {
+    //   setHasOrdinaryImagesMapped(true);
+    //   setImageSelectedIds([]);
+    // } else if (selectedButton === "Discard") {
+    //   setHasDiscardImagesMapped(true);
+    //   setImageSelectedIds([]);
+    // }
+
+    if (imageSelectedIds.length === 0) {
+      return
     }
+
     if (selectedButton === "") {
       return;
     }
 
+    if (selectedButton === "Thumbnail") {
+      setHasThumbnailImagesMapped(true);
+    } else if (selectedButton === "Dimensional") {
+      setHasDimensionalImagesMapped(true);
+    } else if (selectedButton === "WhiteBg") {
+      setHasWhiteBgImagesMapped(true);
+    } else if (selectedButton === "Ordinary") {
+      setHasOrdinaryImagesMapped(true);
+    } else if (selectedButton === "Discard") {
+      setHasDiscardImagesMapped(true);
+    }
+
     if (selectedButton === "Thumbnail" && selectedThumbnail.length == 0) {
-      setImageSelectedIds(imageSelectedIds.filter((id) => id == id));
-      setSelectedThumbnail(imageSelectedIds);
+      // setImageSelectedIds(imageSelectedIds.filter((id) => id == id));
+      // setSelectedThumbnail(imageSelectedIds);
+      setSelectedThumbnail([imageSelectedIds[0]]);
     } else if (selectedButton === "Dimensional") {
       setSelectedDimentional([...selectedDimentional, ...imageSelectedIds]);
     } else if (selectedButton === "WhiteBg") {
@@ -527,9 +559,31 @@ const ExtractionQA = (props) => {
       setSelectedDiscard([...selectedDiscard, ...imageSelectedIds]);
     }
 
-    setAllImages(allImages.filter((itm) => !imageSelectedIds.includes(itm)));
-
+    if (selectedButton === "Thumbnail") {
+      if (selectedThumbnail.length > 0) {
+        console.log('saim', allImages, selectedThumbnail);
+        const newOne = allImages.filter((itm) => imageSelectedIds[0].id !== itm.id)
+        setAllImages([...newOne, ...selectedThumbnail])
+      } else {
+        setAllImages(allImages.filter((itm) => imageSelectedIds[0].id !== itm.id));
+      }
+    } else {
+      setAllImages(allImages.filter((itm) => !imageSelectedIds.includes(itm)));
+    }
     setImageSelectedIds([]);
+    if (selectedButton === "Thumbnail") {
+      setIsThumbnailButtonDisabled(true);
+    } else if (selectedButton === "Dimensional") {
+      setIsDimensionalButtonDisabled(true);
+    } else if (selectedButton === "WhiteBg") {
+      setIsWhiteBgButtonDisabled(true);
+    } else if (selectedButton === "Ordinary") {
+      setIsOrdinaryButtonDisabled(true);
+    } else if (selectedButton === "Discard") {
+      setIsDiscardButtonDisabled(true);
+    }
+    setSelectedButton("")
+
   };
 
   // convert sorted data into json form
@@ -592,7 +646,7 @@ const ExtractionQA = (props) => {
     // console.log(JSON.stringify(structuredData, null, 2));
 
     // Define the API endpoint and data payload
-    const apiUrl = "http://139.144.30.86:8000/api/submit";
+    const apiUrl = `${process.env.REACT_APP_SERVER_ADDRESS}/api/submit`;
     // Send the POST request
     fetch(apiUrl, {
       method: "POST",
@@ -634,9 +688,10 @@ const ExtractionQA = (props) => {
         // ENABLE DISABLE BUTTON ON SUBMIT SORTED DATA
         setIsFetchButtonDisabled(false);
 
-        toast.success("Data submited Successfully!", {
-          position: toast.POSITION.BOTTOM_RIGHT,
-        });
+        triggerToast("Data submited Successfully!", "success", "50px", "top-left")
+
+        setSearchQuery("")
+
       })
       .catch((error) => {
         console.error("Error:", error);
@@ -652,7 +707,7 @@ const ExtractionQA = (props) => {
       ordinary: [],
       discard: [],
       videos: [],
-      change: "",
+      change: "rejected_nad",
       not_doable: true,
     };
     structuredData.id = sku;
@@ -674,13 +729,13 @@ const ExtractionQA = (props) => {
     // if (videos.length > 0) {
     structuredData.videos = videos;
     // }
-    structuredData.change = selectedOption;
+    // structuredData.change = selectedOption;
 
     // Log the structured data as a JSON object.
     // console.log(JSON.stringify(structuredData, null, 2));
 
     // Define the API endpoint and data payload
-    const apiUrl = "http://139.144.30.86:8000/api/submit";
+    const apiUrl = `${process.env.REACT_APP_SERVER_ADDRESS}/api/submit`;
     // Send the POST request
     fetch(apiUrl, {
       method: "POST",
@@ -724,14 +779,45 @@ const ExtractionQA = (props) => {
 
         setVisibilityNotDoable(false);
 
-        toast.success("Data submited Successfully!", {
-          position: toast.POSITION.BOTTOM_RIGHT,
-        });
+        triggerToast("Data submited Successfully!", "success", "50px", "top-left")
+
+        setSearchQuery('')
+
       })
       .catch((error) => {
         console.error("Error:", error);
       });
   };
+
+  useEffect(() => {
+    if (selectedThumbnail.length === 0) {
+      setIsThumbnailButtonDisabled(false)
+    }
+  }, [selectedThumbnail])
+
+  useEffect(() => {
+    if (selectedDimentional.length === 0) {
+      setIsDimensionalButtonDisabled(false)
+    }
+  }, [selectedDimentional])
+
+  useEffect(() => {
+    if (selectedWhiteBg.length === 0) {
+      setIsWhiteBgButtonDisabled(false)
+    }
+  }, [selectedWhiteBg])
+
+  useEffect(() => {
+    if (selectedOrdinary.length === 0) {
+      setIsOrdinaryButtonDisabled(false)
+    }
+  }, [selectedOrdinary])
+
+  useEffect(() => {
+    if (selectedDiscard.length === 0) {
+      setIsDiscardButtonDisabled(false)
+    }
+  }, [selectedDiscard])
 
   return (
     <>
@@ -745,17 +831,14 @@ const ExtractionQA = (props) => {
       <div className="set-right-container">
         {/* header section  */}
         <div className="header">
-          <div className="container">
-            <div className="row d-flex align-items-center justify-content-between">
-              <div className="col-lg-2 col-md-4">
-                <h3>QA Extraction</h3>
-              </div>
-              <div className="col-lg-3 col-md-4 text-center">
-                <h6>
+          <div className="set-container d-flex align-items-center justify-content-center w-100">
+            <div className="d-flex flex-row align-items-center justify-content-between w-100 gap-2" style={{ maxWidth: '1100px' }}>
+              <div>
+                <h6 className="m-0">
                   Product ID: <strong>{showId}</strong>
                 </h6>
               </div>
-              <div className="col-lg-4 col-md-4 text-end">
+              <div className="">
                 {notDoable === true ? (
                   <button className="set-btn-red d-block w-100">
                     Sorter declare as a Not A Doable Product!!!
@@ -764,9 +847,24 @@ const ExtractionQA = (props) => {
                   ""
                 )}
               </div>
-              <div className="col-lg-3 col-md-4 text-end">
+
+              <div className="d-flex flex-row align-items-center gap-1 flex-fill">
+                <div className="d-flex flex-fill">
+                  <input className="w-100 px-3 flex-fill" placeholder="Search By URL" style={{ backgroundColor: "#e8e8e8" }} value={searchQuery} disabled={isFetchButtonDisabled} onChange={(e) => setSearchQuery(e.target.value)} />
+                  <button
+                    id="btn-go"
+                    className="btn p-2 px-3  btn-go-fetch"
+
+                    onClick={executePythonScript}
+                    disabled={isFetchButtonDisabled}
+                  >
+                    GO
+                  </button>
+                </div>
+                <h5 className="m-0" style={{ textAlign: 'center' }}>or</h5>
                 <button
-                  className="btn d-block w-100"
+                  id="btn-fetch"
+                  className="btn d-block btn-fetch"
                   onClick={executePythonScript}
                   disabled={isFetchButtonDisabled}
                 >
@@ -781,77 +879,109 @@ const ExtractionQA = (props) => {
         </div>
 
         {/* radio selector  */}
-        <div className="container mt-5 set-fixed-bar">
-          {/* <div>
+        <div className="mt-5 set-fixed-bar">
+          <div className="inside-div">
+            {/* <div>
             <h2>JSON Result:</h2>
             <pre>{jsonResult}</pre>
           </div> */}
-          <button
-            onClick={() => handleButtonClick("Thumbnail")}
-            className={`select-btn btn ${
-              selectedButton === "Thumbnail" ? "active-button" : ""
-            }${isThumbnailButtonDisabled ? " button-disable" : ""}`}
-            disabled={isThumbnailButtonDisabled}
-          >
-            Thumbnail
-          </button>
+            <button
+              onClick={() => handleButtonClick("Thumbnail")}
+              className={`fw-bold select-btn btn ${selectedButton === "Thumbnail" ? "active-button" : ""
+                }${isThumbnailButtonDisabled ? " button-disable" : ""}`}
+              disabled={isThumbnailButtonDisabled}
+            >
+              Colored Thumbnail
+            </button>
 
-          <button
-            onClick={() => handleButtonClick("Dimensional")}
-            className={`select-btn btn ${
-              selectedButton === "Dimensional" ? "active-button" : ""
-            }${isDimensionalButtonDisabled ? " button-disable" : ""}`}
-            disabled={isDimensionalButtonDisabled}
-          >
-            Dimensional
-          </button>
-          <button
-            onClick={() => handleButtonClick("WhiteBg")}
-            className={`select-btn btn ${
-              selectedButton === "WhiteBg" ? "active-button" : ""
-            }${isWhiteBgButtonDisabled ? " button-disable" : ""}`}
-            disabled={isWhiteBgButtonDisabled}
-          >
-            WhiteBg
-          </button>
-          <button
-            onClick={() => handleButtonClick("Ordinary")}
-            className={`select-btn btn btn-equ ${
-              selectedButton === "Ordinary" ? "active-button" : ""
-            }${isOrdinaryButtonDisabled ? " button-disable" : ""}`}
-            disabled={isOrdinaryButtonDisabled}
-          >
-            Ordinary
-          </button>
+            <button
+              onClick={() => handleButtonClick("Dimensional")}
+              className={`fw-bold select-btn btn ${selectedButton === "Dimensional" ? "active-button" : ""
+                }${isDimensionalButtonDisabled ? " button-disable" : ""}`}
+              disabled={isDimensionalButtonDisabled}
+            >
+              Dimensional
+            </button>
+            <button
+              onClick={() => handleButtonClick("WhiteBg")}
+              className={`fw-bold select-btn btn ${selectedButton === "WhiteBg" ? "active-button" : ""
+                }${isWhiteBgButtonDisabled ? " button-disable" : ""}`}
+              disabled={isWhiteBgButtonDisabled}
+            >
+              White Thumbnails
+            </button>
+            <button
+              onClick={() => handleButtonClick("Ordinary")}
+              className={`fw-bold select-btn btn btn-equ ${selectedButton === "Ordinary" ? "active-button" : ""
+                }${isOrdinaryButtonDisabled ? " button-disable" : ""}`}
+              disabled={isOrdinaryButtonDisabled}
+            >
+              Supportive
+            </button>
 
-          <button
-            onClick={() => handleButtonClick("Discard")}
-            className={`select-btn btn btn-equ ${
-              selectedButton === "Discard" ? "active-button" : ""
-            }${isDiscardButtonDisabled ? " button-disable" : ""}`}
-            disabled={isDiscardButtonDisabled}
-          >
-            Discard
-          </button>
-          <button
-            onClick={submitData}
-            className="submit mt-3"
-            id="set-btn-submit"
-          >
-            Submit
-          </button>
+            <button
+              onClick={() => handleButtonClick("Discard")}
+              className={`fw-bold select-btn btn btn-equ ${selectedButton === "Discard" ? "active-button" : ""
+                }${isDiscardButtonDisabled ? " button-disable" : ""}`}
+              disabled={isDiscardButtonDisabled}
+            >
+              Discard
+            </button>
+            <button
+              onClick={submitData}
+              className="submit mt-3"
+              id="set-btn-submit"
+            >
+              Submit
+            </button>
+          </div>
+
+          <div className="d-flex flex-column justify-content-center align-items-center mt-4 mb-5">
+            <div className="set-select-all me-3">
+              <select value={selectedOption} className="bg-primary-subtle p-1" onChange={handleSelectChange}>
+                {(!notDoable || notDoable === false) && <option value="passed">100% [QA passed]</option>}
+                {(!notDoable || notDoable === false) && <option value="minor">Minor Fixes</option>}
+                <option value="major">Major Fixes</option>
+              </select>
+            </div>
+            {visibilityNotDoable ?
+              <button className="w-100 btn-danger disabled" onClick={executeNoDoAbleScript}>
+                NOT A DOABLE
+              </button>
+              :
+              <button className="w-100 btn-danger">
+                NOT A DOABLE
+              </button>
+            }
+            {mergeSelectedDefaultThumbnail.length > 0 ||
+              mergeSelectedDefaultDimension.length > 0 ||
+              selectedWhiteBg.length > 0 ||
+              selectedOrdinary.length > 0 ||
+              selectedDiscard.length > 0 ? (
+              <button
+                onClick={jsonData}
+                className={`w-100 btn-danger ${areAllImagesSorted() ? "disabled" : ""}`}
+                disabled={!areAllImagesSorted()}
+              >
+                COMPLETED
+              </button>
+            ) : (
+              <button className={`w-100 btn-danger disabled}`} disabled>
+                COMPLETED
+              </button>
+            )}
+          </div>
         </div>
 
         {/* all images map in ui  */}
 
-        <div className="container">
+        <div>
           <div className="row">
             {allImages.map((item) => (
-              <div className="col-md-3 mt-4" key={item.id}>
+              <div className="mt-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
                 <div
-                  className={`card img-fluid ${
-                    imageSelectedIds.includes(item) ? "selected-image" : ""
-                  }`}
+                  className={`card img-fluid ${imageSelectedIds.includes(item) ? "selected-image" : ""
+                    }`}
                   onClick={() => selectMyItem(item)}
                 >
                   <img src={item.src} id={`img-${item.id}`} />
@@ -861,67 +991,59 @@ const ExtractionQA = (props) => {
           </div>
         </div>
 
-        {/* submit button  */}
-        {/* <div className="col-lg-10 col-md-4 text-end">
-          <button onClick={submitData} className="btn btn-primary submit">
-            Submit
-          </button>
-        </div> */}
-
         {/* <h2 className="text-center mb-5">Sorted Data</h2> */}
         {/* THUMBNAIL UPDATED CODE  */}
         <div className="container-fluid py-3 thumbnail-bg mt-4">
-          <div className="container">
-            <div className="main-div">
-              <div className="row">
-                <div className="col-lg-12">
-                  <h2 className="mb-3">Thumbnail</h2>
-                </div>
-                <div className="col-lg-12 all-btns">
+          <div style={{ marginRight: "152px" }}>
+            <div>
+              <h2 className="mb-3">Colored Thumbnail</h2>
+            </div>
+            <div className="main-div d-flex align-items-start flex-wrap">
+              <div>
+                <div className="all-btns">
                   {selectedThumbnail
                     ? selectedThumbnail.length > 0 &&
-                      selectedImage && (
-                        <div className="d-flex">
-                          <div className="">
-                            <h4 className="set-f4">My Update</h4>
-                          </div>
-                          <div className="mb btn-click all-btn ms-3">
-                            {isThumbnailEditMode ? (
-                              <>
-                                <button
-                                  onClick={saveImages}
-                                  className="btn me-3 save"
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  onClick={() => editImages("Thumbnail")}
-                                  className="btn edit"
-                                >
-                                  Edit
-                                </button>
-                              </>
-                            ) : (
+                    selectedImage && (
+                      <div className="d-flex">
+                        <div className="">
+                          <h4 className="set-f4">My Update</h4>
+                        </div>
+                        <div className="mb btn-click all-btn ms-3">
+                          {isThumbnailEditMode ? (
+                            <>
+                              <button
+                                onClick={saveImages}
+                                className="btn me-3 save"
+                              >
+                                Save
+                              </button>
                               <button
                                 onClick={() => editImages("Thumbnail")}
                                 className="btn edit"
                               >
                                 Edit
                               </button>
-                            )}
-                          </div>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => editImages("Thumbnail")}
+                              className="btn edit"
+                            >
+                              Edit
+                            </button>
+                          )}
                         </div>
-                      )
+                      </div>
+                    )
                     : ""}
                 </div>
-                <div className="col-lg-12">
+                <div>
                   <div className="row">
                     {selectedThumbnail.map((item) => (
-                      <div className="col-md-3 mb-4" key={item.id}>
+                      <div className="mb-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
                         <div
-                          className={`card ${
-                            isThumbnailEditMode ? "edit-mode" : ""
-                          }`}
+                          className={`card ${isThumbnailEditMode ? "edit-mode" : ""
+                            }`}
                           onClick={() => selectMyItem(item)}
                         >
                           {isThumbnailEditMode && (
@@ -942,8 +1064,8 @@ const ExtractionQA = (props) => {
                   </div>
                 </div>
               </div>
-              <div className="row">
-                <div className="col-12">
+              <div>
+                <div>
                   <div className="d-flex">
                     <div>
                       <h4 className="set-f4">Default</h4>
@@ -981,33 +1103,30 @@ const ExtractionQA = (props) => {
                 <div className="mt-4">
                   <div className="row">
                     {!defaultThumbnail
-                      ? toast.error("Sorted Data Ended!", {
-                          position: toast.POSITION.BOTTOM_RIGHT,
-                        })
+                      ? triggerToast("Sorted Data Ended!", "error", "50px", "top-left")
                       : defaultThumbnail.map((item) => (
-                          <div className="col-md-3 mb-4" key={item.id}>
-                            <div
-                              className={`card ${
-                                isDefaultThumbnailEditMode ? "edit-mode" : ""
+                        <div className="mb-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
+                          <div
+                            className={`card ${isDefaultThumbnailEditMode ? "edit-mode" : ""
                               }`}
-                              onClick={() => selectMyItem(item)}
-                            >
-                              {isDefaultThumbnailEditMode && (
-                                <div
-                                  className="cross"
-                                  onClick={() => resetDefaultThumbnail(item)}
-                                >
-                                  <CancelIcon />
-                                </div>
-                              )}
-                              <img
-                                className="card-img-top img-fluid"
-                                src={item.src}
-                                alt=""
-                              />
-                            </div>
+                            onClick={() => selectMyItem(item)}
+                          >
+                            {isDefaultThumbnailEditMode && (
+                              <div
+                                className="cross"
+                                onClick={() => resetDefaultThumbnail(item)}
+                              >
+                                <CancelIcon />
+                              </div>
+                            )}
+                            <img
+                              className="card-img-top img-fluid"
+                              src={item.src}
+                              alt=""
+                            />
                           </div>
-                        ))}
+                        </div>
+                      ))}
                   </div>
                 </div>
               </div>
@@ -1018,13 +1137,13 @@ const ExtractionQA = (props) => {
         {/* updated code of dimensional images */}
 
         <div className="container-fluid py-3 dimensnal-bg">
-          <div className="container">
-            <div className="main-div">
-              <div className="row">
-                <div className="col-lg-12">
-                  <h2 className="mb-3">Dimentional</h2>
-                </div>
-                <div className="col-lg-12 all-btns">
+          <div style={{ marginRight: "152px" }}>
+            <div>
+              <h2 className="mb-3">Dimensional Images</h2>
+            </div>
+            <div className="main-div d-flex align-items-start flex-wrap">
+              <div>
+                <div className="all-btns">
                   {selectedDimentional.length > 0 && selectedImage && (
                     <div className="d-flex">
                       <div>
@@ -1058,79 +1177,74 @@ const ExtractionQA = (props) => {
                     </div>
                   )}
                 </div>
-                <div className="col-lg-12">
-                  <div className="row">
-                    {selectedDimentional.map((item) => (
-                      <div className="col-md-3 mb-4" key={item.id}>
-                        <div
-                          className={`card ${
-                            isDimensionalEditMode ? "edit-mode" : ""
+
+                <div className="d-flex">
+                  {selectedDimentional.map((item) => (
+                    <div className="mb-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
+                      <div
+                        className={`card ${isDimensionalEditMode ? "edit-mode" : ""
                           }`}
-                          onClick={() => selectMyItem(item)}
-                        >
-                          {isDimensionalEditMode && (
-                            <div
-                              className="cross"
-                              onClick={() => resetDimensionalImage(item)}
-                            >
-                              <CancelIcon />
-                            </div>
-                          )}
-                          <img
-                            className="card-img-top img-fluid"
-                            src={item.src}
-                          />
-                        </div>
+                        onClick={() => selectMyItem(item)}
+                      >
+                        {isDimensionalEditMode && (
+                          <div
+                            className="cross"
+                            onClick={() => resetDimensionalImage(item)}
+                          >
+                            <CancelIcon />
+                          </div>
+                        )}
+                        <img
+                          className="card-img-top img-fluid"
+                          src={item.src}
+                        />
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="row">
-                <div className="col-12">
-                  <div className="d-flex">
-                    <div>
-                      <h4 className="set-f4">Default</h4>
-                    </div>
-                    <div className="ms-3">
-                      {!isDefaultDimensionEditMode ? (
+              <div>
+                <div className="d-flex">
+                  <div>
+                    <h4 className="set-f4">Default</h4>
+                  </div>
+                  <div className="ms-3">
+                    {!isDefaultDimensionEditMode ? (
+                      <button
+                        onClick={() => handleDefaultDimensionEdit(true)}
+                        className="btn btn-block edit btn-width-auto"
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      <>
                         <button
-                          onClick={() => handleDefaultDimensionEdit(true)}
+                          onClick={saveImages}
+                          className="btn btn-block me-3 save btn-width-auto"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => handleDefaultDimensionEdit(false)}
                           className="btn btn-block edit btn-width-auto"
                         >
-                          Edit
+                          Cancel
                         </button>
-                      ) : (
-                        <>
-                          <button
-                            onClick={saveImages}
-                            className="btn btn-block me-3 save btn-width-auto"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => handleDefaultDimensionEdit(false)}
-                            className="btn btn-block edit btn-width-auto"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      )}
-                    </div>
+                      </>
+                    )}
                   </div>
                 </div>
-              </div>
-              {/* ! DIMESNIONAL DEFAULT IMAGES METHOD START   */}
 
-              <div className="row">
-                {defaultDimension
-                  ? defaultDimension.map((item) => (
-                      <div className="col-md-3 mb-4" key={item.id}>
+                {/* ! DIMESNIONAL DEFAULT IMAGES METHOD START   */}
+
+                <div className="d-flex">
+                  {defaultDimension
+                    ? defaultDimension.map((item) => (
+                      <div className="mb-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
                         <div
-                          className={`card ${
-                            isDefaultDimensionEditMode ? "edit-mode" : ""
-                          }`}
+                          className={`card ${isDefaultDimensionEditMode ? "edit-mode" : ""
+                            }`}
                           onClick={() => selectMyItem(item)}
                         >
                           {isDefaultDimensionEditMode && (
@@ -1148,23 +1262,26 @@ const ExtractionQA = (props) => {
                         </div>
                       </div>
                     ))
-                  : ""}
+                    : ""}
+                </div>
+
+                {/* ! DIMESNIONAL DEFAULT IMAGES METHOD END  */}
+
               </div>
 
-              {/* ! DIMESNIONAL DEFAULT IMAGES METHOD END  */}
             </div>
           </div>
         </div>
 
         {/* WHITE BG UPDATED CODE  */}
         <div className="container-fluid py-3 white-bg">
-          <div className="container">
-            <div className="main-div">
-              <div className="row">
-                <div className="col-lg-12">
-                  <h2 className="mb-3">White BG</h2>
-                </div>
-                <div className="col-lg-12 all-btns">
+          <div style={{ marginRight: "152px" }}>
+            <div className="col-lg-12">
+              <h2 className="mb-3">White Thumbnails</h2>
+            </div>
+            <div className="main-div d-flex flex-wrap">
+              <div>
+                <div className="all-btns">
                   <div className="">
                     <div>
                       {selectedWhiteBg.length > 0 && selectedImage && (
@@ -1182,7 +1299,7 @@ const ExtractionQA = (props) => {
                                   Save
                                 </button>
                                 <button
-                                  onClick={() => editImages("Dimensional")}
+                                  onClick={() => editImages("WhiteBg")}
                                   className="btn edit"
                                 >
                                   Edit
@@ -1190,7 +1307,7 @@ const ExtractionQA = (props) => {
                               </>
                             ) : (
                               <button
-                                onClick={() => editImages("Dimensional")}
+                                onClick={() => editImages("WhiteBg")}
                                 className="btn edit"
                               >
                                 Edit
@@ -1202,14 +1319,13 @@ const ExtractionQA = (props) => {
                     </div>
                   </div>
                 </div>
-                <div className="col-12">
+                <div>
                   <div className="row">
                     {selectedWhiteBg.map((item) => (
-                      <div className="col-md-3 mb-4" key={item.id}>
+                      <div className="mb-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
                         <div
-                          className={`card ${
-                            isWhiteBgEditMode ? "edit-mode" : ""
-                          }`}
+                          className={`card ${isWhiteBgEditMode ? "edit-mode" : ""
+                            }`}
                           onClick={() => selectMyItem(item)}
                         >
                           {isWhiteBgEditMode && (
@@ -1231,14 +1347,14 @@ const ExtractionQA = (props) => {
                 </div>
               </div>
 
-              <div className="row">
-                <div className="col-12">
+              <div>
+                <div>
                   <div className="d-flex">
                     <div>
                       <h4 className="set-f4">Default</h4>
                     </div>
                     <div className="ms-3">
-                      {!isWhiteBgEditMode ? (
+                      {!isDefaultWhiteBgEditMode ? (
                         <button
                           onClick={() => handleDefaulWhiteBgtEdit(true)}
                           className="btn btn-block edit btn-width-auto"
@@ -1264,33 +1380,32 @@ const ExtractionQA = (props) => {
                     </div>
                   </div>
                 </div>
-                <div className="col-12">
+                <div>
                   <div className="row">
                     {defaultWhiteBg
                       ? defaultWhiteBg.map((item) => (
-                          <div className="col-md-3 mb-4" key={item.id}>
-                            <div
-                              className={`card ${
-                                isDefaultWhiteBgEditMode ? "edit-mode" : ""
+                        <div className="mb-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
+                          <div
+                            className={`card ${isDefaultWhiteBgEditMode ? "edit-mode" : ""
                               }`}
-                              onClick={() => selectMyItem(item)}
-                            >
-                              {isDefaultWhiteBgEditMode && (
-                                <div
-                                  className="cross"
-                                  onClick={() => resetDefaultWhiteBg(item)}
-                                >
-                                  <CancelIcon />
-                                </div>
-                              )}
-                              <img
-                                className="card-img-top img-fluid"
-                                src={item.src}
-                                alt=""
-                              />
-                            </div>
+                            onClick={() => selectMyItem(item)}
+                          >
+                            {isDefaultWhiteBgEditMode && (
+                              <div
+                                className="cross"
+                                onClick={() => resetDefaultWhiteBg(item)}
+                              >
+                                <CancelIcon />
+                              </div>
+                            )}
+                            <img
+                              className="card-img-top img-fluid"
+                              src={item.src}
+                              alt=""
+                            />
                           </div>
-                        ))
+                        </div>
+                      ))
                       : ""}
                   </div>
                 </div>
@@ -1303,13 +1418,13 @@ const ExtractionQA = (props) => {
 
         {/* ordinary images section  */}
         <div className="container-fluid py-3 ordinary-b ">
-          <div className="container">
-            <div className="main-div">
-              <div className="row">
-                <div className="col-lg-12">
-                  <h2 className="mb-3 ">Supportive</h2>
-                </div>
-                <div className="col-lg-12 all-btns">
+          <div style={{ marginRight: "152px" }}>
+            <div className="col-lg-12">
+              <h2 className="mb-3 ">Supportive</h2>
+            </div>
+            <div className="main-div d-flex flex-wrap">
+              <div>
+                <div className="all-btns">
                   {selectedOrdinary.length > 0 && selectedImage && (
                     <div className="d-flex">
                       <div>
@@ -1325,7 +1440,7 @@ const ExtractionQA = (props) => {
                               Save
                             </button>
                             <button
-                              onClick={() => editImages("Dimensional")}
+                              onClick={() => editImages("Ordinary")}
                               className="btn edit"
                             >
                               Edit
@@ -1333,7 +1448,7 @@ const ExtractionQA = (props) => {
                           </>
                         ) : (
                           <button
-                            onClick={() => editImages("Dimensional")}
+                            onClick={() => editImages("Ordinary")}
                             className="btn edit"
                           >
                             Edit
@@ -1343,14 +1458,13 @@ const ExtractionQA = (props) => {
                     </div>
                   )}
                 </div>
-                <div className="col-12">
+                <div>
                   <div className="row">
                     {selectedOrdinary.map((item) => (
-                      <div className="col-md-3 mb-4" key={item.id}>
+                      <div className="mb-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
                         <div
-                          className={`card ${
-                            isOrdinarylEditMode ? "edit-mode" : ""
-                          }`}
+                          className={`card ${isOrdinarylEditMode ? "edit-mode" : ""
+                            }`}
                           onClick={() => selectMyItem(item)}
                         >
                           {isOrdinarylEditMode && (
@@ -1370,83 +1484,82 @@ const ExtractionQA = (props) => {
                     ))}
                   </div>
                 </div>
-                <div className="col-12">
-                  <div className="d-flex">
-                    <div>
-                      <h4 className="set-f4">Default</h4>
-                    </div>
-                    <div className="ms-3">
-                      {/* ! DIMESNIONAL DEFAULT IMAGES METHOD START   */}
-                      {!isDefaultOrdinaryEditMode ? (
+              </div>
+              <div>
+                {/* ! Ordinary DEFAULT IMAGES METHOD END  */}
+
+                <div className="d-flex">
+                  <div>
+                    <h4 className="set-f4">Default</h4>
+                  </div>
+                  <div className="ms-3">
+                    {/* ! DIMESNIONAL DEFAULT IMAGES METHOD START   */}
+                    {!isDefaultOrdinaryEditMode ? (
+                      <button
+                        onClick={() => handleDefaulOrdinaryEdit(true)}
+                        className="btn btn-block edit btn-width-auto"
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      <>
                         <button
-                          onClick={() => handleDefaulOrdinaryEdit(true)}
+                          onClick={saveImages}
+                          className="btn btn-block me-3 save btn-width-auto"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => handleDefaulOrdinaryEdit(false)}
                           className="btn btn-block edit btn-width-auto"
                         >
-                          Edit
+                          Cancel
                         </button>
-                      ) : (
-                        <>
-                          <button
-                            onClick={saveImages}
-                            className="btn btn-block me-3 save btn-width-auto"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => handleDefaulOrdinaryEdit(false)}
-                            className="btn btn-block edit btn-width-auto"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="row">
-                    {defaulOrdinary
-                      ? defaulOrdinary.map((item) => (
-                          <div className="col-md-3 mb-4" key={item.id}>
-                            <div
-                              className={`card ${
-                                isDefaultOrdinaryEditMode ? "edit-mode" : ""
-                              }`}
-                              onClick={() => selectMyItem(item)}
-                            >
-                              {isDefaultOrdinaryEditMode && (
-                                <div
-                                  className="cross"
-                                  onClick={() => resetDefaultOrdinary(item)}
-                                >
-                                  <CancelIcon />
-                                </div>
-                              )}
-                              <img
-                                className="card-img-top img-fluid"
-                                src={item.src}
-                                alt=""
-                              />
-                            </div>
-                          </div>
-                        ))
-                      : ""}
+                      </>
+                    )}
                   </div>
                 </div>
+                <div className="row">
+                  {defaulOrdinary
+                    ? defaulOrdinary.map((item) => (
+                      <div className="mb-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
+                        <div
+                          className={`card ${isDefaultOrdinaryEditMode ? "edit-mode" : ""
+                            }`}
+                          onClick={() => selectMyItem(item)}
+                        >
+                          {isDefaultOrdinaryEditMode && (
+                            <div
+                              className="cross"
+                              onClick={() => resetDefaultOrdinary(item)}
+                            >
+                              <CancelIcon />
+                            </div>
+                          )}
+                          <img
+                            className="card-img-top img-fluid"
+                            src={item.src}
+                            alt=""
+                          />
+                        </div>
+                      </div>
+                    ))
+                    : ""}
+                </div>
               </div>
-
-              {/* ! Ordinary DEFAULT IMAGES METHOD END  */}
             </div>
           </div>
         </div>
 
         {/* DISCARD DEFAULT IMAGES METHOD  */}
         <div className="container-fluid py-3 discard-bg">
-          <div className="container">
-            <div className="main-div">
-              <div className="row">
-                <div className="col-lg-12">
-                  <h2 className="mb-3 ">Discard</h2>
-                </div>
-                <div className="col-lg-12 all-btns">
+          <div style={{ marginRight: "152px" }}>
+            <div className="col-lg-12">
+              <h2 className="mb-3 ">Discard</h2>
+            </div>
+            <div className="main-div d-flex align-items-start flex-wrap">
+              <div>
+                <div className="all-btns">
                   {selectedDiscard.length > 0 && selectedImage && (
                     <div className="d-flex">
                       <div>
@@ -1462,7 +1575,7 @@ const ExtractionQA = (props) => {
                               Save
                             </button>
                             <button
-                              onClick={() => editImages("Dimensional")}
+                              onClick={() => editImages("Discard")}
                               className="btn edit"
                             >
                               Edit
@@ -1470,7 +1583,7 @@ const ExtractionQA = (props) => {
                           </>
                         ) : (
                           <button
-                            onClick={() => editImages("Dimensional")}
+                            onClick={() => editImages("Discard")}
                             className="btn edit"
                           >
                             Edit
@@ -1480,14 +1593,13 @@ const ExtractionQA = (props) => {
                     </div>
                   )}
                 </div>
-                <div className="col-12">
+                <div>
                   <div className="row">
                     {selectedDiscard.map((item) => (
-                      <div className="col-md-3 mb-4" key={item.id}>
+                      <div className="mb-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
                         <div
-                          className={`card ${
-                            isDiscardlEditMode ? "edit-mode" : ""
-                          }`}
+                          className={`card ${isDiscardlEditMode ? "edit-mode" : ""
+                            }`}
                           onClick={() => selectMyItem(item)}
                         >
                           {isDiscardlEditMode && (
@@ -1509,7 +1621,7 @@ const ExtractionQA = (props) => {
                 </div>
               </div>
 
-              <div className="row">
+              <div>
                 <div className="d-flex">
                   <div>
                     <h4 className="set-f4">Default</h4>
@@ -1541,33 +1653,32 @@ const ExtractionQA = (props) => {
                     )}
                   </div>
                 </div>
-                <div className="col-12">
+                <div>
                   <div className="row">
                     {defaultDiscard
                       ? defaultDiscard.map((item) => (
-                          <div className="col-md-3 mb-4" key={item.id}>
-                            <div
-                              className={`card ${
-                                isDefaultDiscardEditMode ? "edit-mode" : ""
+                        <div className="mb-4" key={item.id} style={{ width: '180px', marginLeft: '20px' }}>
+                          <div
+                            className={`card ${isDefaultDiscardEditMode ? "edit-mode" : ""
                               }`}
-                              onClick={() => selectMyItem(item)}
-                            >
-                              {isDefaultDiscardEditMode && (
-                                <div
-                                  className="cross"
-                                  onClick={() => resetDefaultDiscard(item)}
-                                >
-                                  <CancelIcon />
-                                </div>
-                              )}
-                              <img
-                                className="card-img-top img-fluid"
-                                src={item.src}
-                                alt=""
-                              />
-                            </div>
+                            onClick={() => selectMyItem(item)}
+                          >
+                            {isDefaultDiscardEditMode && (
+                              <div
+                                className="cross"
+                                onClick={() => resetDefaultDiscard(item)}
+                              >
+                                <CancelIcon />
+                              </div>
+                            )}
+                            <img
+                              className="card-img-top img-fluid"
+                              src={item.src}
+                              alt=""
+                            />
                           </div>
-                        ))
+                        </div>
+                      ))
                       : ""}
                   </div>
                 </div>
@@ -1621,13 +1732,12 @@ const ExtractionQA = (props) => {
           </div>
         </div> */}
 
-        <div className="d-flex justify-content-center align-items-center text-end mt-4 mb-5">
+        {/* <div className="d-flex justify-content-center align-items-center text-end mt-4 mb-5">
           <div className="set-select-all me-3">
             <select value={selectedOption} onChange={handleSelectChange}>
-              <option value="QA passed">QA passed</option>
-              <option value="Minor changes">Minor changes</option>
-              <option value="Major changes">Major changes</option>
-              <option value="Extream changes">Extream changes</option>
+              {(!notDoable || notDoable === false) && <option value="passed">100% [QA passed]</option>}
+              {(!notDoable || notDoable === false) && <option value="minor">Minor Fixes</option>}
+              <option value="major">Major Fixes</option>
             </select>
           </div>
           {visibilityNotDoable === true && notDoable === true ? (
@@ -1641,10 +1751,10 @@ const ExtractionQA = (props) => {
             ""
           )}
           {mergeSelectedDefaultThumbnail.length > 0 ||
-          mergeSelectedDefaultDimension.length > 0 ||
-          selectedWhiteBg.length > 0 ||
-          selectedOrdinary.length > 0 ||
-          selectedDiscard.length > 0 ? (
+            mergeSelectedDefaultDimension.length > 0 ||
+            selectedWhiteBg.length > 0 ||
+            selectedOrdinary.length > 0 ||
+            selectedDiscard.length > 0 ? (
             <button
               onClick={jsonData}
               className={`btn-danger ${areAllImagesSorted() ? "disabled" : ""}`}
@@ -1657,7 +1767,7 @@ const ExtractionQA = (props) => {
               Sorted Data in Json
             </button>
           )}
-        </div>
+        </div> */}
         <footer>
           <div className="col-lg-12">
             <div className="footer-left">
@@ -1665,7 +1775,7 @@ const ExtractionQA = (props) => {
             </div>
           </div>
         </footer>
-      </div>
+      </div >
     </>
   );
 };
